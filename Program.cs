@@ -10,15 +10,27 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        if (builder.Environment.IsDevelopment())
+        {
+            // Development: Allow React dev server
+            policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        }
+        else
+        {
+            // Production: React is served by same server, but allow some flexibility
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        }
     });
 });
 
-// Register DealDeskOrchestrator
-builder.Services.AddSingleton<DealDeskOrchestrator>();
+// Register DealDeskOrchestrator and related services
+builder.Services.AddSingleton<NewDealDeskOrchestrator>();
+builder.Services.AddSingleton<ConversationManager>();
 
 // Add logging
 builder.Services.AddLogging();

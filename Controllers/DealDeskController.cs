@@ -9,13 +9,15 @@ namespace agents.milla.Controllers;
 [Route("api/[controller]")]
 public class DealDeskController : ControllerBase
 {
-    private readonly DealDeskOrchestrator _orchestrator;
+    private readonly NewDealDeskOrchestrator _orchestrator;
     private readonly ILogger<DealDeskController> _logger;
+    private readonly IConfiguration _configuration;
 
-    public DealDeskController(DealDeskOrchestrator orchestrator, ILogger<DealDeskController> logger)
+    public DealDeskController(NewDealDeskOrchestrator orchestrator, ILogger<DealDeskController> logger, IConfiguration configuration)
     {
         _orchestrator = orchestrator;
         _logger = logger;
+        _configuration = configuration;
     }
 
     [HttpPost("chat")]
@@ -24,6 +26,25 @@ public class DealDeskController : ControllerBase
         if (string.IsNullOrWhiteSpace(request?.Message))
         {
             return BadRequest(new { error = "Message is required" });
+        }
+
+        if (string.IsNullOrWhiteSpace(request?.AccessCode))
+        {
+            return BadRequest(new { error = "Access code is required" });
+        }
+
+        // Validate access code
+        var requiredAccessCode = _configuration["DEMO_ACCESS_CODE"] ?? Environment.GetEnvironmentVariable("DEMO_ACCESS_CODE");
+        if (string.IsNullOrWhiteSpace(requiredAccessCode))
+        {
+            _logger.LogError("DEMO_ACCESS_CODE environment variable not configured");
+            return StatusCode(500, new { error = "Demo access not configured" });
+        }
+
+        if (request.AccessCode != requiredAccessCode)
+        {
+            _logger.LogWarning("Invalid access code attempt: {AccessCode}", request.AccessCode);
+            return Unauthorized(new { error = "Invalid access code" });
         }
 
         _logger.LogInformation("Received deal chat request: {Message}", request.Message);
@@ -36,8 +57,11 @@ public class DealDeskController : ControllerBase
             Response.Headers.Add("Connection", "keep-alive");
             Response.Headers.Add("Access-Control-Allow-Origin", "*");
             
+            // Generate a session ID for this conversation (you could use user ID in production)
+            var sessionId = HttpContext.Connection.Id ?? "default";
+            
             // Process the deal request and stream responses
-            await foreach (var agentResponse in _orchestrator.ProcessDealRequestAsync(request))
+            await foreach (var agentResponse in _orchestrator.ProcessChatMessageAsync(request, sessionId))
             {
                 var jsonResponse = JsonSerializer.Serialize(agentResponse, new JsonSerializerOptions
                 {

@@ -1,0 +1,54 @@
+name: Build and Deploy AI Deal Desk
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: 'ai-deal-desk-demo'   # Replace with your Azure Web App name
+  DOTNET_VERSION: '7.0'
+  NODE_VERSION: '18.x'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: ClientApp/package-lock.json
+
+    - name: Install and build React app
+      run: |
+        cd ClientApp
+        npm ci
+        npm run build
+
+    - name: Build .NET application
+      run: |
+        dotnet restore
+        dotnet build --configuration Release
+
+    - name: Publish application
+      run: |
+        dotnet publish --configuration Release --output ./publish
+
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      if: github.ref == 'refs/heads/main'
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: ./publish
